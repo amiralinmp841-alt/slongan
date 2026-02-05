@@ -195,16 +195,15 @@ async def leader_board(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------
 app = Flask(__name__)
 
-@app.get("/")
+@app.route("/", methods=["GET"])
 def health():
     return "OK", 200
 
 
-@app.post(f"/{TOKEN}")
-async def telegram_webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
-    await application.process_update(update)
+@app.route(f"/{TOKEN}", methods=["POST"])
+def telegram_webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.process_update(update)
     return "OK", 200
 
 # ---------------------------
@@ -230,16 +229,18 @@ application.add_handler(CallbackQueryHandler(button_handler))
 application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, check_messages))
 
 # ---------------------------
-# RUN
+# START
 # ---------------------------
 if __name__ == "__main__":
+    import threading
     import asyncio
 
-    async def main():
+    async def setup():
         await application.initialize()
         await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
         await application.start()
 
-    asyncio.run(main())
+    asyncio.run(setup())
 
+    # 🔥 این خط کلید حل مشکله
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))

@@ -205,9 +205,16 @@ def health():
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    loop.create_task(application.process_update(update))
+    update = Update.de_json(
+        request.get_json(force=True),
+        application.bot
+    )
+    loop.call_soon_threadsafe(
+        asyncio.create_task,
+        application.process_update(update)
+    )
     return "OK", 200
+
 
 
 # ---------------------------
@@ -223,6 +230,7 @@ conv = ConversationHandler(
         REMOVE_SLOGAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, remove_slogan)],
     },
     fallbacks=[CallbackQueryHandler(button_handler)],
+    per_message=True
 )
 
 application.add_handler(CommandHandler("start", start))
@@ -240,8 +248,9 @@ if __name__ == "__main__":
 
     async def setup():
         await application.initialize()
+        await application.start()   # ← این خط حیاتی بود
         await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
-
+    
     loop.run_until_complete(setup())
 
     app.run(

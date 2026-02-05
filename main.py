@@ -187,14 +187,18 @@ def health():
 def telegram_webhook():
     data_json = request.get_json(force=True)
     update = Update.de_json(data_json, application.bot)
-    # ✅ درست: ایجاد Task در همان loop بدون asyncio.run
-    asyncio.create_task(application.process_update(update))
+    # ✅ ارسال ایمن coroutine به loop داخلی Application
+    asyncio.run_coroutine_threadsafe(application.process_update(update), application.loop)
     return "OK", 200
+
 
 # ---------------------------
 # INIT BOT
 # ---------------------------
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 application = Application.builder().token(TOKEN).build()
+application.loop = loop  # ← اضافه کردن این خط
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("total_point", total_point))
@@ -213,3 +217,4 @@ if __name__ == "__main__":
 
     asyncio.get_event_loop().run_until_complete(setup())
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+

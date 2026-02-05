@@ -1,22 +1,13 @@
 import os
 import json
 from flask import Flask, request
-from telegram import (
-    Update, KeyboardButton, ReplyKeyboardMarkup
-)
-from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes,
-    filters, ConversationHandler
-)
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 import asyncio
 
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
-# ---------------------------
-# ENV
-# ---------------------------
 TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = int(os.environ.get("ADMIN_ID"))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
@@ -38,12 +29,7 @@ def save_data(data):
 data = load_data()
 
 # ---------------------------
-# States
-# ---------------------------
-ADD_SLOGAN_TEXT, ADD_SLOGAN_SCORE, REMOVE_SLOGAN = range(3)
-
-# ---------------------------
-# Keyboard
+# Keyboards
 # ---------------------------
 def admin_menu_keyboard():
     keyboard = [
@@ -64,98 +50,75 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("سلام! ربات فعاله 👋")
         return
 
-    await update.message.reply_text(
-        "پنل مدیریت:",
-        reply_markup=admin_menu_keyboard()
-    )
+    context.user_data.clear()
+    await update.message.reply_text("پنل مدیریت:", reply_markup=admin_menu_keyboard())
 
 # ---------------------------
-# BUTTON HANDLER
+# HANDLER
 # ---------------------------
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     text = update.message.text
 
-    if update.effective_user.id != ADMIN_ID:
+    if user_id != ADMIN_ID:
         await update.message.reply_text("دسترسی ندارید.")
-        return ConversationHandler.END
+        return
 
+    # بررسی وضعیت فعلی
+    state = context.user_data.get("state")
+
+    if state == "adding_slogan_text":
+        context.user_data["new_slogan"] = text
+        context.user_data["state"] = "adding_slogan_score"
+        await update.message.reply_text("امتیاز شعار را بفرست:", reply_markup=back_button_keyboard())
+        return
+
+    if state == "adding_slogan_score":
+        try:
+            score = int(text)
+            data["slogans"][context.user_data["new_slogan"]] = score
+            save_data(data)
+            await update.message.reply_text("شعار ذخیره شد ✅", reply_markup=admin_menu_keyboard())
+            context.user_data.clear()
+        except:
+            await update.message.reply_text("عدد نامعتبره.", reply_markup=back_button_keyboard())
+        return
+
+    if state == "removing_slogan":
+        if text in data["slogans"]:
+            del data["slogans"][text]
+            save_data(data)
+            await update.message.reply_text("حذف شد.", reply_markup=admin_menu_keyboard())
+        else:
+            await update.message.reply_text("پیدا نشد.", reply_markup=admin_menu_keyboard())
+        context.user_data.clear()
+        return
+
+    # دکمه‌ها
     if text == "➕ افزودن شعار":
+        context.user_data["state"] = "adding_slogan_text"
         await update.message.reply_text("متن شعار را بفرست:", reply_markup=back_button_keyboard())
-        return ADD_SLOGAN_TEXT
+        return
 
     if text == "❌ حذف شعار":
+        context.user_data["state"] = "removing_slogan"
         await update.message.reply_text("متن شعار جهت حذف:", reply_markup=back_button_keyboard())
-        return REMOVE_SLOGAN
+        return
 
     if text == "📄 لیست شعارها":
         if not data["slogans"]:
             await update.message.reply_text("شعاری ثبت نشده.", reply_markup=admin_menu_keyboard())
-            return ConversationHandler.END
-
+            return
         msg = "📄 لیست شعارها:\n\n"
         for s, sc in data["slogans"].items():
             msg += f"• {s} → {sc}\n"
-
         await update.message.reply_text(msg, reply_markup=admin_menu_keyboard())
-        return ConversationHandler.END
+        return
 
     if text == "🔙 بازگشت":
+        context.user_data.clear()
         await update.message.reply_text("بازگشت به پنل", reply_markup=admin_menu_keyboard())
-        return ConversationHandler.END
-
-# ---------------------------
-# ADD SLOGAN
-# ---------------------------
-async def add_slogan_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["slogan"] = update.message.text
-    await update.message.reply_text("امتیاز شعار را بفرست:", reply_markup=back_button_keyboard())
-    return ADD_SLOGAN_SCORE
-
-async def add_slogan_score(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        score = int(update.message.text)
-    except:
-        await update.message.reply_text("عدد نامعتبره.", reply_markup=back_button_keyboard())
-        return ADD_SLOGAN_SCORE
-
-    data["slogans"][context.user_data["slogan"]] = score
-    save_data(data)
-
-    await update.message.reply_text("شعار ذخیره شد ✅", reply_markup=admin_menu_keyboard())
-    return ConversationHandler.END
-
-# ---------------------------
-# REMOVE
-# ---------------------------
-async def remove_slogan(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    slogan = update.message.text
-    if slogan in data["slogans"]:
-        del data["slogans"][slogan]
-        save_data(data)
-        await update.message.reply_text("حذف شد.", reply_markup=admin_menu_keyboard())
-    else:
-        await update.message.reply_text("پیدا نشد.", reply_markup=admin_menu_keyboard())
-    return ConversationHandler.END
-
-# ---------------------------
-# GROUP MESSAGE CHECK
-# ---------------------------
-async def check_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    user = update.effective_user
-    user_id = str(user.id)
-
-    for slogan, score in data["slogans"].items():
-        if slogan in text:
-            data["users"][user_id] = data["users"].get(user_id, 0) + score
-            save_data(data)
-
-            await update.message.reply_text(
-                f"🎉 تبریک {user.first_name}!\n"
-                f"امتیاز دریافت‌شده: {score}\n"
-                f"جمع امتیاز شما: {data['users'][user_id]}"
-            )
-            break
+        return
 
 # ---------------------------
 # TOTAL POINT
@@ -173,24 +136,33 @@ async def leader_board(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("هنوز امتیازی ثبت نشده.")
         return
 
-    sorted_users = sorted(
-        data["users"].items(),
-        key=lambda x: x[1],
-        reverse=True
-    )[:10]
-
+    sorted_users = sorted(data["users"].items(), key=lambda x: x[1], reverse=True)[:10]
     msg = "🏆 لیدربورد برترین‌ها:\n\n"
-
-    for idx, (user_id, score) in enumerate(sorted_users, start=1):
+    for idx, (uid, score) in enumerate(sorted_users, start=1):
         try:
-            member = await context.bot.get_chat_member(update.effective_chat.id, int(user_id))
+            member = await context.bot.get_chat_member(update.effective_chat.id, int(uid))
             name = member.user.first_name
         except:
-            name = f"User {user_id}"
-
+            name = f"User {uid}"
         msg += f"{idx}. {name} — {score} امتیاز\n"
-
     await update.message.reply_text(msg)
+
+# ---------------------------
+# GROUP MESSAGE CHECK
+# ---------------------------
+async def check_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    user = update.effective_user
+    uid = str(user.id)
+
+    for slogan, score in data["slogans"].items():
+        if slogan in text:
+            data["users"][uid] = data["users"].get(uid, 0) + score
+            save_data(data)
+            await update.message.reply_text(
+                f"🎉 تبریک {user.first_name}!\nامتیاز دریافت‌شده: {score}\nجمع امتیاز شما: {data['users'][uid]}"
+            )
+            break
 
 # ---------------------------
 # FLASK APP
@@ -205,10 +177,7 @@ def health():
 def telegram_webhook():
     data_json = request.get_json(force=True)
     update = Update.de_json(data_json, application.bot)
-    
-    # مستقیم با loop.run_in_executor اجرا کن
     loop.run_in_executor(None, lambda: asyncio.run(application.process_update(update)))
-    
     return "OK", 200
 
 # ---------------------------
@@ -216,22 +185,11 @@ def telegram_webhook():
 # ---------------------------
 application = Application.builder().token(TOKEN).build()
 
-conv = ConversationHandler(
-    entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, button_handler)],
-    states={
-        ADD_SLOGAN_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_slogan_text)],
-        ADD_SLOGAN_SCORE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_slogan_score)],
-        REMOVE_SLOGAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, remove_slogan)],
-    },
-    fallbacks=[MessageHandler(filters.TEXT & ~filters.COMMAND, button_handler)],
-    per_message=True
-)
-
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("total_point", total_point))
 application.add_handler(CommandHandler("leader_board", leader_board))
-application.add_handler(conv)
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_messages))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, check_messages))
 
 # ---------------------------
 # START
@@ -244,7 +202,4 @@ if __name__ == "__main__":
 
     loop.run_until_complete(setup())
 
-    app.run(
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000))
-    )
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))

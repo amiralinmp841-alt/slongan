@@ -210,10 +210,10 @@ def telegram_webhook():
         application.bot
     )
     loop.call_soon_threadsafe(
-        asyncio.create_task,
-        application.process_update(update)
+        lambda: asyncio.create_task(application.process_update(update))
     )
     return "OK", 200
+
 
 
 
@@ -237,7 +237,7 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("total_point", total_point))
 application.add_handler(CommandHandler("leader_board", leader_board))
 application.add_handler(conv)
-application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, check_messages))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_messages))
 
 # ---------------------------
 # START

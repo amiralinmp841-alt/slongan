@@ -2,12 +2,14 @@ import os
 import json
 from flask import Flask, request
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, ContextTypes, filters
+)
 import asyncio
 
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
+# ---------------------------
+# ENV
+# ---------------------------
 TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = int(os.environ.get("ADMIN_ID"))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
@@ -27,6 +29,16 @@ def save_data(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 data = load_data()
+
+# ---------------------------
+# Persian to English number conversion
+# ---------------------------
+def persian_to_english_number(s):
+    persian_digits = "۰۱۲۳۴۵۶۷۸۹"
+    english_digits = "0123456789"
+    for p, e in zip(persian_digits, english_digits):
+        s = s.replace(p, e)
+    return s
 
 # ---------------------------
 # Keyboards
@@ -49,7 +61,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("سلام! ربات فعاله 👋")
         return
-
     context.user_data.clear()
     await update.message.reply_text("پنل مدیریت:", reply_markup=admin_menu_keyboard())
 
@@ -64,7 +75,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("دسترسی ندارید.")
         return
 
-    # بررسی وضعیت فعلی
     state = context.user_data.get("state")
 
     if state == "adding_slogan_text":
@@ -75,7 +85,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if state == "adding_slogan_score":
         try:
-            score = int(text)
+            text_en = persian_to_english_number(text)
+            score = int(text_en)
             data["slogans"][context.user_data["new_slogan"]] = score
             save_data(data)
             await update.message.reply_text("شعار ذخیره شد ✅", reply_markup=admin_menu_keyboard())
@@ -124,8 +135,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # TOTAL POINT
 # ---------------------------
 async def total_point(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    total = data["users"].get(user_id, 0)
+    uid = str(update.effective_user.id)
+    total = data["users"].get(uid, 0)
     await update.message.reply_text(f"📊 جمع امتیاز شما: {total}")
 
 # ---------------------------
@@ -135,7 +146,6 @@ async def leader_board(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not data["users"]:
         await update.message.reply_text("هنوز امتیازی ثبت نشده.")
         return
-
     sorted_users = sorted(data["users"].items(), key=lambda x: x[1], reverse=True)[:10]
     msg = "🏆 لیدربورد برترین‌ها:\n\n"
     for idx, (uid, score) in enumerate(sorted_users, start=1):
@@ -177,7 +187,8 @@ def health():
 def telegram_webhook():
     data_json = request.get_json(force=True)
     update = Update.de_json(data_json, application.bot)
-    loop.run_in_executor(None, lambda: asyncio.run(application.process_update(update)))
+    # ✅ درست: ایجاد Task در همان loop بدون asyncio.run
+    asyncio.create_task(application.process_update(update))
     return "OK", 200
 
 # ---------------------------
@@ -200,6 +211,5 @@ if __name__ == "__main__":
         await application.start()
         await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
 
-    loop.run_until_complete(setup())
-
+    asyncio.get_event_loop().run_until_complete(setup())
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))

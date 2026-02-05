@@ -209,6 +209,7 @@ def telegram_webhook():
     loop.create_task(application.process_update(update))
     return "OK", 200
 
+
 # ---------------------------
 # INIT BOT
 # ---------------------------
@@ -235,15 +236,16 @@ application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, c
 # START
 # ---------------------------
 if __name__ == "__main__":
-    import threading
     import asyncio
 
     async def setup():
         await application.initialize()
-        await application.start()
         await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
 
-    asyncio.run(setup())
+    loop.run_until_complete(setup())
 
-    # 🔥 این خط کلید حل مشکله
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000))
+    )
+

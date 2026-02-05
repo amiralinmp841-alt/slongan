@@ -238,9 +238,9 @@ if __name__ == "__main__":
     async def setup():
         await application.initialize()
         await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
-        await application.start()
 
     asyncio.run(setup())
 
     # 🔥 این خط کلید حل مشکله
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+

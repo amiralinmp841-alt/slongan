@@ -205,16 +205,13 @@ def health():
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
-    update = Update.de_json(
-        request.get_json(force=True),
-        application.bot
-    )
-    loop.call_soon_threadsafe(
-        lambda: asyncio.create_task(application.process_update(update))
-    )
+    data_json = request.get_json(force=True)
+    update = Update.de_json(data_json, application.bot)
+    
+    # مستقیم با loop.run_in_executor اجرا کن
+    loop.run_in_executor(None, lambda: asyncio.run(application.process_update(update)))
+    
     return "OK", 200
-
-
 
 
 # ---------------------------

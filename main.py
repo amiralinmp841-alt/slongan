@@ -240,6 +240,7 @@ if __name__ == "__main__":
 
     async def setup():
         await application.initialize()
+        await application.start()
         await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
 
     asyncio.run(setup())

@@ -2,7 +2,7 @@ import os
 import json
 from flask import Flask, request
 from telegram import (
-    Update, InlineKeyboardMarkup, InlineKeyboardButton
+    Update, KeyboardButton, ReplyKeyboardMarkup
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -43,19 +43,18 @@ data = load_data()
 ADD_SLOGAN_TEXT, ADD_SLOGAN_SCORE, REMOVE_SLOGAN = range(3)
 
 # ---------------------------
+# Keyboard
+# ---------------------------
+def admin_menu_keyboard():
+    keyboard = [
+        [KeyboardButton("➕ افزودن شعار"), KeyboardButton("❌ حذف شعار")],
+        [KeyboardButton("📄 لیست شعارها"), KeyboardButton("🔙 بازگشت")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-def admin_menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ افزودن شعار", callback_data="add_slogan")],
-        [InlineKeyboardButton("❌ حذف شعار", callback_data="remove_slogan")],
-        [InlineKeyboardButton("📄 لیست شعارها", callback_data="list_slogan")],
-        [InlineKeyboardButton("🔙 بازگشت", callback_data="back_main")]
-    ])
-
-def back_button():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 بازگشت", callback_data="back_main")]
-    ])
+def back_button_keyboard():
+    keyboard = [[KeyboardButton("🔙 بازگشت")]]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 # ---------------------------
 # START
@@ -67,42 +66,41 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "پنل مدیریت:",
-        reply_markup=admin_menu()
+        reply_markup=admin_menu_keyboard()
     )
 
 # ---------------------------
 # BUTTON HANDLER
 # ---------------------------
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    text = update.message.text
 
-    if query.from_user.id != ADMIN_ID:
-        await query.edit_message_text("دسترسی ندارید.")
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("دسترسی ندارید.")
         return ConversationHandler.END
 
-    if query.data == "add_slogan":
-        await query.edit_message_text("متن شعار را بفرست:", reply_markup=back_button())
+    if text == "➕ افزودن شعار":
+        await update.message.reply_text("متن شعار را بفرست:", reply_markup=back_button_keyboard())
         return ADD_SLOGAN_TEXT
 
-    if query.data == "remove_slogan":
-        await query.edit_message_text("متن شعار جهت حذف:", reply_markup=back_button())
+    if text == "❌ حذف شعار":
+        await update.message.reply_text("متن شعار جهت حذف:", reply_markup=back_button_keyboard())
         return REMOVE_SLOGAN
 
-    if query.data == "list_slogan":
+    if text == "📄 لیست شعارها":
         if not data["slogans"]:
-            await query.edit_message_text("شعاری ثبت نشده.", reply_markup=admin_menu())
+            await update.message.reply_text("شعاری ثبت نشده.", reply_markup=admin_menu_keyboard())
             return ConversationHandler.END
 
         msg = "📄 لیست شعارها:\n\n"
         for s, sc in data["slogans"].items():
             msg += f"• {s} → {sc}\n"
 
-        await query.edit_message_text(msg, reply_markup=admin_menu())
+        await update.message.reply_text(msg, reply_markup=admin_menu_keyboard())
         return ConversationHandler.END
 
-    if query.data == "back_main":
-        await query.edit_message_text("بازگشت به پنل", reply_markup=admin_menu())
+    if text == "🔙 بازگشت":
+        await update.message.reply_text("بازگشت به پنل", reply_markup=admin_menu_keyboard())
         return ConversationHandler.END
 
 # ---------------------------
@@ -110,20 +108,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------
 async def add_slogan_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["slogan"] = update.message.text
-    await update.message.reply_text("امتیاز شعار را بفرست:", reply_markup=back_button())
+    await update.message.reply_text("امتیاز شعار را بفرست:", reply_markup=back_button_keyboard())
     return ADD_SLOGAN_SCORE
 
 async def add_slogan_score(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         score = int(update.message.text)
     except:
-        await update.message.reply_text("عدد نامعتبره.")
+        await update.message.reply_text("عدد نامعتبره.", reply_markup=back_button_keyboard())
         return ADD_SLOGAN_SCORE
 
     data["slogans"][context.user_data["slogan"]] = score
     save_data(data)
 
-    await update.message.reply_text("شعار ذخیره شد ✅", reply_markup=admin_menu())
+    await update.message.reply_text("شعار ذخیره شد ✅", reply_markup=admin_menu_keyboard())
     return ConversationHandler.END
 
 # ---------------------------
@@ -134,9 +132,9 @@ async def remove_slogan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if slogan in data["slogans"]:
         del data["slogans"][slogan]
         save_data(data)
-        await update.message.reply_text("حذف شد.", reply_markup=admin_menu())
+        await update.message.reply_text("حذف شد.", reply_markup=admin_menu_keyboard())
     else:
-        await update.message.reply_text("پیدا نشد.", reply_markup=admin_menu())
+        await update.message.reply_text("پیدا نشد.", reply_markup=admin_menu_keyboard())
     return ConversationHandler.END
 
 # ---------------------------
@@ -213,21 +211,20 @@ def telegram_webhook():
     
     return "OK", 200
 
-
 # ---------------------------
 # INIT BOT
 # ---------------------------
 application = Application.builder().token(TOKEN).build()
 
 conv = ConversationHandler(
-    entry_points=[CallbackQueryHandler(button_handler)],
+    entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, button_handler)],
     states={
         ADD_SLOGAN_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_slogan_text)],
         ADD_SLOGAN_SCORE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_slogan_score)],
         REMOVE_SLOGAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, remove_slogan)],
     },
-    fallbacks=[CallbackQueryHandler(button_handler)],
-    per_message=False
+    fallbacks=[MessageHandler(filters.TEXT & ~filters.COMMAND, button_handler)],
+    per_message=True
 )
 
 application.add_handler(CommandHandler("start", start))
@@ -240,17 +237,14 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_me
 # START
 # ---------------------------
 if __name__ == "__main__":
-    import asyncio
-
     async def setup():
         await application.initialize()
-        await application.start()   # ← این خط حیاتی بود
+        await application.start()
         await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
-    
+
     loop.run_until_complete(setup())
 
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 10000))
     )
-

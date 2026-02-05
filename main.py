@@ -204,22 +204,21 @@ async def leader_board(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
 
 
-# -------------------------------------------------
-# FLASK WEBHOOK (FAST FIX)
-# -------------------------------------------------
+# ---------------------------
+# FLASK APP
+# ---------------------------
 app = Flask(__name__)
 
 @app.route("/", methods=["GET"])
 def health():
     return "OK", 200
 
-
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     data_json = request.get_json(force=True)
     update = Update.de_json(data_json, application.bot)
-    loop.create_task(application.process_update(update))
-    return "OK", 200
+    loop.run_in_executor(None, lambda: asyncio.run(application.process_update(update)))
+    return "OK", 200200
 
 
 # -------------------------------------------------
@@ -254,3 +253,4 @@ if __name__ == "__main__":
 
     loop.run_until_complete(setup())
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+

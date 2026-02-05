@@ -191,18 +191,20 @@ async def leader_board(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
 
 # ---------------------------
-# FLASK
+# FLASK APP
 # ---------------------------
 app = Flask(__name__)
 
 @app.get("/")
-def home():
-    return "Bot is running!", 200
+def health():
+    return "OK", 200
+
 
 @app.post(f"/{TOKEN}")
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.process_update(update)
+async def telegram_webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
+    await application.process_update(update)
     return "OK", 200
 
 # ---------------------------
@@ -231,8 +233,13 @@ application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, c
 # RUN
 # ---------------------------
 if __name__ == "__main__":
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        webhook_url=f"{WEBHOOK_URL}/{TOKEN}"
-    )
+    import asyncio
+
+    async def main():
+        await application.initialize()
+        await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
+        await application.start()
+
+    asyncio.run(main())
+
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))

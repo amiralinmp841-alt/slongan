@@ -9,6 +9,10 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes,
     filters, ConversationHandler
 )
+import asyncio
+
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 # ---------------------------
 # ENV
@@ -199,11 +203,10 @@ app = Flask(__name__)
 def health():
     return "OK", 200
 
-
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    application.process_update(update)
+    loop.create_task(application.process_update(update))
     return "OK", 200
 
 # ---------------------------
@@ -243,4 +246,3 @@ if __name__ == "__main__":
 
     # 🔥 این خط کلید حل مشکله
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-

@@ -230,14 +230,13 @@ conv = ConversationHandler(
         REMOVE_SLOGAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, remove_slogan)],
     },
     fallbacks=[CallbackQueryHandler(button_handler)],
-    per_message=True
+    per_message=False
 )
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("total_point", total_point))
 application.add_handler(CommandHandler("leader_board", leader_board))
 application.add_handler(conv)
-application.add_handler(CallbackQueryHandler(button_handler))
 application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, check_messages))
 
 # ---------------------------
